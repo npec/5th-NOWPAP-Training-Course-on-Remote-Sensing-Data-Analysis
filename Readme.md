@@ -25,12 +25,12 @@ This page introduces materials for the Webinar 2: Dec. 14 - 16, 2021
 
 - Monitoring and assessment of water quality by ocean color remote sensing 
 
-|<span style="font-weight:bold; font-size: 1.5em">Day &emsp;&emsp;</span>|<span style="font-weight:bold; font-size: 1.5em">Time<br />(JST)</span>|<span style="font-weight:bold; font-size: 1.5em">Program</span>|<span style="font-weight:bold; font-size: 1.5em">Lecturers &emsp;</span>|
+|<span style="font-weight:bold; font-size: 1.5em">Day &emsp;&emsp;</span>|<span style="font-weight:bold; font-size: 1.5em">Time<br />(JST)</span>|<span style="font-weight:bold; font-size: 1.5em">Program</span>|<span style="font-weight:bold; font-size: 1.5em">Lecturers &emsp;&emsp;</span>|
 |:--------|:------------------------|:----------------------------------------------------------------------------|:---------------------------------------|
 | Dec 14<br />(Day 1) | 14:00<br />-<br />14:10 | Introduction and housekeeping <span style="font-weight:bold">10 mins</span> | Makoto Hayashi<br/>and<br/>Genki Terauchi |
 |         | 14:10<br />-<br />14:50 | Introduction to satellite biological oceanography and ocean color remote sensing (L) <span style="font-weight:bold">40 mins</span>  | Joji Ishizaka |
-|         | 15:00<br />-<br />15:50 | Application of ocean color products (H) <span style="font-weight:bold">50 mins </span> <br />- Introduction to the global eutrophication watch | Eligio Maure |
-|         | 16:00<br />-<br />17:00 | Working with satellite swath imagery (H) <span style="font-weight:bold">60 mins </span> <br />- Introduction to the online match-up tool | Eligio Maure |
+|         | 15:00<br />-<br />15:50 | Application of ocean color products (H) <span style="font-weight:bold">50 mins </span> <br />- Introduction to the [global eutrophication watch](https://eutrophicationwatch.users.earthengine.app/view/global-eutrophication-watch) | Eligio Maure |
+|         | 16:00<br />-<br />17:00 | [Working with satellite swath imagery](https://github.com/npec/5th-NOWPAP-Training-Course-on-Remote-Sensing-Data-Analysis/tree/main/02%20Working%20with%20swath%20imagery) (H) <span style="font-weight:bold">60 mins </span> <br />- Introduction to the [online match-up tool](https://ocean.nowpap3.go.jp/smat/) | Eligio Maure |
 | | | | |
 |Dec 15<br />(Day 2) | 14:00<br />-<br />14:40 | Application of ocean color products (L) <span style="font-weight:bold">40 mins</span><br/> - Introduction to eutrophication and Harmful algal blooms (HABs)| Wonkook Kim |
 |         | 15:00<br />-<br />17:20 | Time-series analysis (H) <span style="font-weight:bold">90 mins </span> <br /> i) Browse and download NOWPAP-Marine Env. Watch data<br/>ii) Generate monthly composites from daily images<br/>iii) Create animations from monthly images | Eligio Maure |
