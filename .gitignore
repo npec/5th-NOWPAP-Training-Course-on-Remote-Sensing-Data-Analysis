@@ -1,0 +1,39 @@
+# ignore .idea files
+.idea
+.git
+.ipynb_checkpoints
+
+# even though you're ignoring .a files above
+#!lib.a
+
+# ignore folders
+LogFiles/
+logs
+ScheduleBackup/
+Paper/
+NRT/
+_build/
+_static/
+_templates/
+
+# ignore GPortal ftp listing
+ftp.gportal.jaxa.jp/
+
+# ignore python cache
+__pycache__/
+
+
+# ingone data files
+*.bz2
+*.hdf
+*.L2_RR_OC
+*.nc
+*.png
+*.h5
+*.rst
+conf.py
+debugger*
+make.bat
+Makefile
+
+        

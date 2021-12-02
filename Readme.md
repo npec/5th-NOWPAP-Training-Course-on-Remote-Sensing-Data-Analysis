@@ -25,7 +25,7 @@ This page introduces materials for the Webinar 2: Dec. 14 - 16, 2021
 
 - Monitoring and assessment of water quality by ocean color remote sensing 
 
-|<span style="font-weight:bold; font-size: 1.5em">Day&nbsp;&nbsp;</span>|<span style="font-weight:bold; font-size: 1.5em">Time<br />(JST)</span>|<span style="font-weight:bold; font-size: 1.5em">Program</span>|<span style="font-weight:bold; font-size: 1.5em">Lecturers&nbsp;</span>|
+|<span style="font-weight:bold; font-size: 1.5em">Day &emsp;&emsp;</span>|<span style="font-weight:bold; font-size: 1.5em">Time<br />(JST)</span>|<span style="font-weight:bold; font-size: 1.5em">Program</span>|<span style="font-weight:bold; font-size: 1.5em">Lecturers &emsp;</span>|
 |:--------|:------------------------|:----------------------------------------------------------------------------|:---------------------------------------|
 | Dec 14<br />(Day 1) | 14:00<br />-<br />14:10 | Introduction and housekeeping <span style="font-weight:bold">10 mins</span> | Makoto Hayashi<br/>and<br/>Genki Terauchi |
 |         | 14:10<br />-<br />14:50 | Introduction to satellite biological oceanography and ocean color remote sensing (L) <span style="font-weight:bold">40 mins</span>  | Joji Ishizaka |
