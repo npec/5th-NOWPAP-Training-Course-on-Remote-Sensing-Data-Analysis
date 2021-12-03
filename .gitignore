@@ -16,9 +16,6 @@ __pycache__/
 *.bz2
 *.hdf
 *.L2_RR_OC
-*.nc
-*.png
-*.h5
 *.rst
 *.pptx
 
