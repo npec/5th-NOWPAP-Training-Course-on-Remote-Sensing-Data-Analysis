@@ -3,21 +3,10 @@
 .git
 .ipynb_checkpoints
 
-# even though you're ignoring .a files above
-#!lib.a
-
 # ignore folders
 LogFiles/
-logs
-ScheduleBackup/
-Paper/
-NRT/
-_build/
-_static/
-_templates/
+logs/
 
-# ignore GPortal ftp listing
-ftp.gportal.jaxa.jp/
 
 # ignore python cache
 __pycache__/
@@ -32,6 +21,7 @@ __pycache__/
 *.h5
 *.rst
 *.pptx
+
 conf.py
 debugger*
 make.bat

@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
+import scipy.io as sio
 from matplotlib import ticker
 from scipy import stats
 
@@ -17,6 +19,16 @@ class ReturnValue:
     xp: np.array
     yp: np.array
     desc: str
+
+
+def coastline(file: Path = None):
+    key = 'ncst'
+    if file is None:
+        file = '{}/{}'.format(Path().parent,
+                              'sample_data/nowpap_sea.mat')
+        # print(file)
+    cline = sio.loadmat(file, variable_names=[key], squeeze_me=True).get(key)
+    return cline[:, 0], cline[:, 1]
 
 
 def regress(x, y, scale: str = 'log-log'):
@@ -51,7 +63,7 @@ def regress(x, y, scale: str = 'log-log'):
     p = 0.001 if p < 0.001 else (
         0.01 if p < 0.01 else (
             0.05 if p < 0.05 else p))
-    p = float(f'{p:.3f}')
+    pv = f"p<{float(f'{p:.3f}')}" if p < 0.05 else f"p={float(f'{p:.3f}')}"
 
     if b > 0:
         s = f'+ {b:.3f}'
@@ -73,12 +85,12 @@ def regress(x, y, scale: str = 'log-log'):
     if scale == 'log-log':
         txt = f'${base} (y)={m:.3f} \\times {base} (x) {s}$\n' \
               f'$N={xi.size}$\n$R^{2}={rsq:.2f}$\n$r={r:.2f}$\n' \
-              f'$p<{p:g}$\n$\\delta={bias:.2f}$'
+              f'${pv}$\n$\\delta={bias:.2f}$'
         return ReturnValue(xp=xx, yp=yy, desc=txt)
 
     txt = f'$y={m:.3f} x {s}$\n' \
           f'$N={xi.size}$\n$R^{2}={rsq:.2f}$\n$r={r:.2f}$\n' \
-          f'$p<{p:g}$\n$\\delta={bias:.2f}$'
+          f'${pv}$\n$\\delta={bias:.2f}$'
     return ReturnValue(xp=xx, yp=yy, desc=txt)
 
 
@@ -148,6 +160,100 @@ def identity_line(ax, lines: list):
     ax.set_ylim([y0, y1])
     return
 
+
+def validation(x, y, plt, xlabel: str, ylabel: str, xscale: str = 'log',
+               yscale: str = 'log', xlim=None, ylim=None, id_lines=None,
+               s: int = 100, alpha: float = 0.4, marker: str = 'o',
+               figure_name: str = None):
+    if id_lines is None:
+        id_lines = [1, 2, 3]
+    if ylim is None:
+        ylim = [0.01, 100]
+    if xlim is None:
+        xlim = [0.01, 100]
+
+    fig, ax = plt.subplots(figsize=(12, 9))
+
+    # Display scatter
+    ax.scatter(
+        x, y,
+        c='k',
+        marker=marker,
+        alpha=alpha,
+        s=s,
+    )
+
+    # Set axis labels
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+
+    # Set the scale to log
+    ax.set_xscale(xscale)
+    ax.set_yscale(xscale)
+
+    # Set axis limits
+    ax.set_xlim(*xlim)
+    ax.set_ylim(*ylim)
+
+    # Identity line
+    identity_line(ax=ax, lines=id_lines)
+
+    # Configure ticks
+    logticks(ax=ax, n=2)
+
+    # overestimate
+    xov, yov = overestimated(x=x.to_numpy(),
+                             y=y.to_numpy(),
+                             ratio=id_lines[-1])
+    ax.scatter(xov, yov, s=s, c='r', marker='o', alpha=0.5)
+
+    # underestimate
+    xun, yun = underestimated(x=x.to_numpy(),
+                              y=y.to_numpy(),
+                              ratio=id_lines[-1])
+    ax.scatter(xun, yun, s=s, c='b', marker='o', alpha=0.5)
+
+    # Regression line
+    mask = np.isnan(x.to_numpy()) | np.isnan(y.to_numpy())
+    result = regress(x=x.to_numpy()[~mask].flatten(),
+                     y=y.to_numpy()[~mask].flatten(),
+                     scale=f'{xscale}-{yscale}')
+    rl = ax.plot(result.xp, result.yp, '-g', label='linear regression', lw=6)
+
+    plt.legend(loc='lower right')
+    t = ax.text(.015, 3, result.desc)
+
+    if figure_name:
+        plt.tight_layout()
+        plt.savefig(figure_name, dpi=200)
+    return
+
+
+def mpl_custom(mpl):
+    # custom image settings
+    mpl.rcParams.update({
+        'font.size': 25,
+        # 'axes.grid': True,
+        'axes.linewidth': 2,
+        'grid.linewidth': 1,
+
+        'xtick.major.size': 8,
+        'xtick.major.width': 2,
+
+        'xtick.minor.visible': True,
+        'xtick.minor.size': 4,
+        'xtick.minor.width': 1,
+
+        'ytick.major.size': 8,
+        'ytick.major.width': 2,
+
+        'ytick.minor.visible': True,
+        'ytick.minor.size': 4,
+        'ytick.minor.width': 1,
+
+        'savefig.facecolor': '#F5F5F5'
+    })
+    return
 
 # def in_water(df, sensor: str):
 #     if sensor in ('MODIS-Aqua', 'aqua'):
