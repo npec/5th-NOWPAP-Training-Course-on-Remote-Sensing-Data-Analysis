@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import h5py
 import numpy as np
 import scipy.io as sio
 from matplotlib import ticker
@@ -253,6 +254,253 @@ def mpl_custom(mpl):
 
         'savefig.facecolor': '#F5F5F5'
     })
+    return
+
+
+def bilinear_interp(src_geo: np.array, interval: int):
+    """
+        Bilinear interpolation of SGLI geo-location corners to a spatial grid
+
+        Parameters
+        ----------
+        src_geo: np.array
+            either lon or lat
+        interval: int
+            resampling interval in pixels
+
+        Return
+        ------
+        out_geo: np.array
+            2-D array with dims == to geophysical variables
+    """
+    sds = np.concatenate((src_geo, src_geo[-1].reshape(1, -1)), axis=0)
+    sds = np.concatenate((sds, sds[:, -1].reshape(-1, 1)), axis=1)
+
+    ratio_0 = np.tile(
+        np.linspace(0, (interval - 1) / interval, interval, dtype=np.float32),
+        (sds.shape[0] * interval, sds.shape[1] - 1))
+
+    ratio_1 = np.tile(
+        np.linspace(0, (interval - 1) / interval, interval, dtype=np.float32).reshape(-1, 1),
+        (sds.shape[0] - 1, (sds.shape[1] - 1) * interval))
+
+    sds = np.repeat(sds, interval, axis=0)
+    sds = np.repeat(sds, interval, axis=1)
+    interp = (1. - ratio_0) * sds[:, :-interval] + ratio_0 * sds[:, interval:]
+    return (1. - ratio_1) * interp[:-interval, :] + ratio_1 * interp[interval:, :]
+
+
+def navigation_data(file: Path, key: str):
+    with h5py.File(file, 'r') as hdf:
+        nsl = hdf['/Image_data'].attrs['Number_of_lines'][0]
+        psl = hdf['/Image_data'].attrs['Number_of_pixels'][0]
+        img_size = (slice(0, nsl), slice(0, psl))
+
+        if 'lat' in key.lower():
+            # Get Latitude
+            lat = get_data(h5f=hdf, key='Latitude')
+            interval = hdf['/Geometry_data/Latitude'].attrs['Resampling_interval'][0]
+            lat = bilinear_interp(src_geo=lat, interval=interval)[img_size]
+            return lat
+
+        # Get Longitude
+        lon = get_data(h5f=hdf, key='Longitude')
+        interval = hdf['/Geometry_data/Longitude'].attrs['Resampling_interval'][0]
+    is_stride_180 = False
+    if np.abs(np.nanmin(lon) - np.nanmax(lon)) > 180.:
+        is_stride_180 = True
+        lon[lon < 0] = 360. + lon[lon < 0]
+    lon = bilinear_interp(src_geo=lon, interval=interval)[img_size]
+
+    if is_stride_180:
+        lon[lon > 180.] = lon[lon > 180.] - 360.
+    return lon
+
+
+def get_data(h5f: h5py, key: str):
+    data = h5f[f'Geometry_data/{key}'][:]
+    attrs = dict(h5f[f'Geometry_data/{key}'].attrs)
+
+    if 'Error_DN' in attrs.keys():
+        data[data == attrs.pop('Error_DN')[0]] = np.NaN
+
+    if ('Minimum_valid_DN' in attrs.keys()) and \
+            ('Maximum_valid_DN' in attrs.keys()):
+        valid_min = attrs.pop('Minimum_valid_DN')[0]
+        valid_max = attrs.pop('Maximum_valid_DN')[0]
+        data[(data < valid_min) | (data > valid_max)] = np.NaN
+
+    # Convert DN to PV
+    if ('Slope' in attrs.keys()) and ('Offset' in attrs.keys()):
+        data = data * attrs.pop('Slope')[0] + attrs.pop('Offset')[0]
+
+    if ('Minimum_valid_value' in attrs.keys()) and \
+            ('Maximum_valid_value' in attrs.keys()):
+        valid_min = attrs.pop('Minimum_valid_value')[0]
+        valid_max = attrs.pop('Maximum_valid_value')[0]
+        data[(data < valid_min) | (data > valid_max)] = np.NaN
+
+    return data
+
+
+def attr_fmt(h5: h5py, address: str):
+    result = {}
+    for key, val in h5[address].attrs.items():
+        if key in ('Dim0', 'Dim1'):
+            continue
+        try:
+            val = val[0]
+        except IndexError:
+            pass
+
+        if type(val) in (bytes, np.bytes_):
+            val = val.decode()
+        result.update({key: val})
+
+    desc = result['Data_description'] \
+        if 'Data_description' in result.keys() else None
+    if desc and ('Remote Sensing Reflectance(Rrs)' in desc):
+        result['units'] = result['Rrs_unit']
+    return result
+
+
+def h5_read(file: Path, key: str):
+    with h5py.File(file, 'r') as h5:
+        if key == 'QA_flag':
+            sds = np.ma.squeeze(h5[f'Image_data/{key}'][:])
+            np.ma.set_fill_value(sds, 0)
+            return sds
+
+        fill_value = np.float32(-32767)
+        attrs = attr_fmt(h5=h5, address=f'Image_data/{key}')
+        sdn = h5[f'Image_data/{key}'][:]
+
+    mask = False
+    if 'Error_DN' in attrs.keys():
+        mask = mask | np.where(np.equal(sdn, attrs.pop('Error_DN')), True, False)
+    if 'Land_DN' in attrs.keys():
+        mask = mask | np.where(np.equal(sdn, attrs.pop('Land_DN')), True, False)
+    if 'Cloud_error_DN' in attrs.keys():
+        mask = mask | np.where(np.equal(sdn, attrs.pop('Cloud_error_DN')), True, False)
+    if 'Retrieval_error_DN' in attrs.keys():
+        mask = mask | np.where(np.equal(sdn, attrs.pop('Retrieval_error_DN')), True, False)
+    if ('Minimum_valid_DN' in attrs.keys()) and ('Maximum_valid_DN' in attrs.keys()):
+        # https://shikisai.jaxa.jp/faq/docs/GCOM-C_Products_Users_Guide_entrylevel__attach4_jp_191007.pdf#page=46
+        mask = mask | np.where((sdn <= attrs.pop('Minimum_valid_DN')) |
+                               (sdn >= attrs.pop('Maximum_valid_DN')), True, False)
+
+    # Convert DN to PV
+    slope, offset = 1, 0
+    if 'NWLR' in key:
+        if ('Rrs_slope' in attrs.keys()) and \
+                ('Rrs_slope' in attrs.keys()):
+            slope = attrs.pop('Rrs_slope')
+            offset = attrs.pop('Rrs_offset')
+    else:
+        if ('Slope' in attrs.keys()) and \
+                ('Offset' in attrs.keys()):
+            slope = attrs.pop('Slope')
+            offset = attrs.pop('Offset')
+
+    sds = np.ma.squeeze(sdn * slope + offset)
+    sds[mask] = fill_value
+    sds = np.ma.masked_where(mask, sds).astype(np.float32)
+    np.ma.set_fill_value(sds, fill_value)
+    return sds
+
+
+SEN_DICT = {'SeaWiFS': 'S', 'MODIS-Aqua': 'A', 'MERIS': 'M', 'VIIRS-SNPP': 'V', 'YOC': 'Y', 'SGLI': 'GS'}
+
+
+# Day month fetching file generator
+def daymonth_filegen(sen: str, year: int, filetype: tuple = ext):
+    url = 'https://ocean.nowpap3.go.jp/image_search/{filetype}/{subarea}/{year}/{filename}'
+
+    init = SEN_DICT[sen]
+    # Define the netCDF (PNG) file name
+    mend = me + 1 if me < 13 else me
+    for month in range(ms, mend):
+        if comp == 'day':
+            dend = datetime(year, month + 1, 1) if month < 12 else datetime(year + 1, 1, 1)
+            dend = min(datetime.fromordinal(dend.toordinal() - 1).day, de)
+            for day in range(ds, dend + 1):
+                files = [f'{init}{year}{month:02}{day:02}_{var}_{sba}_{comp}.{ext}'
+                         for ext in filetype]
+
+                yield from [url.format(filetype='netcdf', subarea=sba, year=year, filename=f)
+                            if f.endswith('.nc') else
+                            url.format(filetype='images', subarea=sba, year=year, filename=f)
+                            for f in files]
+
+        if comp == 'month':
+            files = [f'{init}{year}{month:02}_{var}_{sba}_{comp}.{ext}'
+                     for ext in filetype]
+
+            yield from [url.format(filetype='netcdf', subarea=sba, year=year, filename=f)
+                        if f.endswith('.nc') else
+                        url.format(filetype='images', subarea=sba, year=year, filename=f)
+                        for f in files]
+
+
+# Function to download the data
+def get_file(query_url: str, opath: Path, bar: tqdm):
+    # path = output_dir.format(sen=sen)
+    # path = output_dir
+    basename = os.path.basename(query_url)
+
+    # if not os.path.isdir(path):
+    #     os.makedirs(path)
+
+    savefile = opath.joinpath(basename)
+    size = 0
+    if savefile.is_file():
+        size = savefile.stat()
+
+    time.sleep(0.1)
+    with requests.get(query) as r:
+        if r.status_code != 200:
+            bar.set_description(f'FileNotFound: {basename}')
+            bar.update()
+            return
+        total = int(r.headers.get('content-length'))
+        if total == size:
+            bar.set_description(f'FileExists, Skip: {basename}')
+            bar.update()
+            return
+
+            # print('File: {} '.format(savefile), end='')
+        bar.set_description(f'Downloading: {basename}')
+        bar.update()
+        with open(savefile, "wb") as handle:
+            for chunk in r.iter_content(chunk_size=max(int(total / 1000), 1024 * 1024)):
+                # download progress check tqdm
+                if chunk:
+                    handle.write(chunk)
+    return
+
+
+def download(var: str, sba: str, total: int, sen: str, syear: int,
+             eyear: int, init: str, comp: str):
+    with tqdm(total=total) as bar:
+        for year in range(syear, eyear + 1):
+            if comp in ('day', 'month'):
+                for query in daymonth_filegen(sen=sen, year=year):
+                    # --------------------------------------------
+                    get_file(query_url=query, opath=opath, bar=bar)
+                    # --------------------------------------------
+
+            if comp == 'year':
+                ncfile = f'{init}{year}_{var}_{sba}_{comp}.nc'
+                query = url.format(filetype='netcdf', subarea=sba, year=year, filename=ncfile)
+                # --------------------------------------------
+                get_file(query_url=query, opath=opath, bar=bar)
+                # --------------------------------------------
+
+                pngfile = f'{init}{year}_{var}_{sba}_{comp}.png'
+                query = url.format(filetype='images', subarea=sba, year=year, filename=pngfile)
+                # --------------------------------------------
+                get_file(query_url=query, opath=opath, bar=bar)
+                # --------------------------------------------
     return
 
 # def in_water(df, sensor: str):
