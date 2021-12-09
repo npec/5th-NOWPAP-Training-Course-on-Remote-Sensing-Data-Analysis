@@ -29,14 +29,14 @@ This page introduces materials for the Webinar 2: Dec. 14 - 16, 2021
 |:--------|:------------------------|:----------------------------------------------------------------------------|:---------------------------------------|
 | Dec 14<br />(Day 1) | 14:00<br />-<br />14:10 | Introduction and housekeeping <span style="font-weight:bold">10 mins</span> | Makoto Hayashi<br/>and<br/>Genki Terauchi |
 |         | 14:10<br />-<br />14:50 | Introduction to satellite biological oceanography and ocean color remote sensing (L) <span style="font-weight:bold">40 mins</span>  | Joji Ishizaka |
-|         | 15:00<br />-<br />15:50 | [Application of ocean color products](https://github.com/npec/5th-NOWPAP-Training-Course-on-Remote-Sensing-Data-Analysis/tree/main/01%20Application%20of%20ocean%20colour%20products) (H) <span style="font-weight:bold">50 mins </span> <br />- Introduction to the [global eutrophication watch](https://eutrophicationwatch.users.earthengine.app/view/global-eutrophication-watch) | Eligio Maure |
-|         | 16:00<br />-<br />17:00 | [Working with satellite swath imagery](https://github.com/npec/5th-NOWPAP-Training-Course-on-Remote-Sensing-Data-Analysis/tree/main/02%20Working%20with%20swath%20imagery) (H) <span style="font-weight:bold">60 mins </span> <br />- Introduction to the [online match-up tool](https://ocean.nowpap3.go.jp/smat/) | Eligio Maure |
+|         | 15:00<br />-<br />15:50 | [Application of ocean color products](https://github.com/npec/5th-NOWPAP-Training-Course-on-Remote-Sensing-Data-Analysis/tree/main/01%20Application%20of%20ocean%20colour%20products/Day1-1.1.Introduction%20to%20the%20global%20eutrophication%20watch.pdf) (H) <span style="font-weight:bold">50 mins </span> <br />- Introduction to the [global eutrophication watch](https://eutrophicationwatch.users.earthengine.app/view/global-eutrophication-watch) | Eligio Maure |
+|         | 16:00<br />-<br />17:00 | [Working with satellite swath imagery](https://github.com/npec/5th-NOWPAP-Training-Course-on-Remote-Sensing-Data-Analysis/tree/main/02%20Working%20with%20swath%20imagery/Day1-2.Working%20with%20satellite%20swath%20imagery.pdf) (H) <span style="font-weight:bold">60 mins </span> <br />- Introduction to the [online match-up tool](https://ocean.nowpap3.go.jp/smat/) | Eligio Maure |
 | | | | |
 |Dec 15<br />(Day 2) | 14:00<br />-<br />14:40 | Application of ocean color products (L) <span style="font-weight:bold">40 mins</span><br/> - Introduction to eutrophication and Harmful algal blooms (HABs)| Wonkook Kim |
-|         | 15:00<br />-<br />17:20 | Time-series analysis (H) <span style="font-weight:bold">90 mins </span> <br /> i) Browse and download NOWPAP-Marine Env. Watch data<br/>ii) Generate monthly composites from daily images<br/>iii) Create animations from monthly images | Eligio Maure |
+|         | 15:00<br />-<br />17:20 | Time-series analysis (H) <span style="font-weight:bold">90 mins </span> <br /> i) [Browse](https://ocean.nowpap3.go.jp/?page_id=862) and [download](https://github.com/npec/5th-NOWPAP-Training-Course-on-Remote-Sensing-Data-Analysis/tree/main/03%20Time-series%20analysis/2.1.time-series-data-download.ipynb) NOWPAP-Marine Env. Watch data<br/>ii) Generate monthly composites from daily images<br/>iii) Create animations from monthly images | Eligio Maure |
 | | | | |
 |Dec 16<br />(Day 3) | 14:00<br />-<br />15:40 | Time-series analysis (H) <span style="font-weight:bold">90 mins</span><br/>i) Extract annual max from monthly images<br/>ii) Extract point/region of interest<br/>iii) Perform trend detection | Eligio Maure |
-|         | 15:50<br />-<br />16:50 | Application of ocean color products (H) <span style="font-weight:bold">50 mins </span> <br />- Introduction to the global eutrophication watch | Eligio Maure<br/> and<br/> Genki Terauchi |
+|         | 15:50<br />-<br />16:50 | Wrap up and Q&A <span style="font-weight:bold">60 mins </span> | Eligio Maure<br/> and<br/> Genki Terauchi |
 
 (L) Lecture  
 (H) Hands-on exercise
@@ -44,7 +44,7 @@ This page introduces materials for the Webinar 2: Dec. 14 - 16, 2021
 ---
 ## Organizer:
 
-NOWPAP CEARAC
+[NOWPAP CEARAC](http://cearac.nowpap.org/)
 
 ## Supporter:
 

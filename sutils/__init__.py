@@ -1,11 +1,16 @@
+import os
+import time
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import h5py
 import numpy as np
+import requests
 import scipy.io as sio
 from matplotlib import ticker
 from scipy import stats
+from tqdm import tqdm
 
 
 @dataclass
@@ -410,35 +415,36 @@ def h5_read(file: Path, key: str):
 
 
 SEN_DICT = {'SeaWiFS': 'S', 'MODIS-Aqua': 'A', 'MERIS': 'M', 'VIIRS-SNPP': 'V', 'YOC': 'Y', 'SGLI': 'GS'}
+URL = 'https://ocean.nowpap3.go.jp/image_search/{filetype}/{subarea}/{year}/{filename}'
 
 
 # Day month fetching file generator
-def daymonth_filegen(sen: str, year: int, filetype: tuple = ext):
-    url = 'https://ocean.nowpap3.go.jp/image_search/{filetype}/{subarea}/{year}/{filename}'
-
-    init = SEN_DICT[sen]
+def dmo_filegen(sensor: str, year: int, start_month: int, end_month: int, filetype: tuple,
+                composite_period: str, start_day: int, end_day: int, variable: str, subarea: str):
+    init = SEN_DICT[sensor]
     # Define the netCDF (PNG) file name
-    mend = me + 1 if me < 13 else me
-    for month in range(ms, mend):
-        if comp == 'day':
-            dend = datetime(year, month + 1, 1) if month < 12 else datetime(year + 1, 1, 1)
-            dend = min(datetime.fromordinal(dend.toordinal() - 1).day, de)
-            for day in range(ds, dend + 1):
-                files = [f'{init}{year}{month:02}{day:02}_{var}_{sba}_{comp}.{ext}'
+    end_mo = end_month + 1 if end_month < 13 else end_month
+    for month in range(start_month, end_mo):
+        if composite_period == 'day':
+            end_dy = datetime(year, month + 1, 1) if month < 12 else datetime(year + 1, 1, 1)
+            end_dy = min(datetime.fromordinal(end_dy.toordinal() - 1).day, end_day)
+
+            for day in range(start_day, end_dy + 1):
+                files = [f'{init}{year}{month:02}{day:02}_{variable}_{subarea}_{composite_period}.{ext}'
                          for ext in filetype]
 
-                yield from [url.format(filetype='netcdf', subarea=sba, year=year, filename=f)
+                yield from [URL.format(filetype='netcdf', subarea=subarea, year=year, filename=f)
                             if f.endswith('.nc') else
-                            url.format(filetype='images', subarea=sba, year=year, filename=f)
+                            URL.format(filetype='images', subarea=subarea, year=year, filename=f)
                             for f in files]
 
-        if comp == 'month':
-            files = [f'{init}{year}{month:02}_{var}_{sba}_{comp}.{ext}'
+        if composite_period == 'month':
+            files = [f'{init}{year}{month:02}_{variable}_{subarea}_{composite_period}.{ext}'
                      for ext in filetype]
 
-            yield from [url.format(filetype='netcdf', subarea=sba, year=year, filename=f)
+            yield from [URL.format(filetype='netcdf', subarea=subarea, year=year, filename=f)
                         if f.endswith('.nc') else
-                        url.format(filetype='images', subarea=sba, year=year, filename=f)
+                        URL.format(filetype='images', subarea=subarea, year=year, filename=f)
                         for f in files]
 
 
@@ -457,7 +463,7 @@ def get_file(query_url: str, opath: Path, bar: tqdm):
         size = savefile.stat()
 
     time.sleep(0.1)
-    with requests.get(query) as r:
+    with requests.get(query_url) as r:
         if r.status_code != 200:
             bar.set_description(f'FileNotFound: {basename}')
             bar.update()
@@ -479,29 +485,74 @@ def get_file(query_url: str, opath: Path, bar: tqdm):
     return
 
 
-def download(var: str, sba: str, total: int, sen: str, syear: int,
-             eyear: int, init: str, comp: str):
+def download(variable: str, subarea: str, sensor: str, start_year: int,
+             end_year: int, composite_period: str, start_month: int, file_type: tuple,
+             end_month: int, start_day: int, end_day: int, output_dir: Path):
+
+    if composite_period == 'year':
+        total = len(range(start_year, end_year + 1))
+    else:
+        if composite_period == 'month':
+            total = len([datetime(y, m, 1)
+                         for y in range(start_year, end_year + 1)
+                         for m in range(1, 13)
+                         if (y <= end_year) and (m <= end_month)])
+        else:
+            start = datetime(start_year, start_month, start_day).toordinal()
+            try:
+                end = datetime(end_year, end_month, end_day).toordinal() + 1
+            except ValueError:
+                end = datetime(end_year + 1, 1, 1).toordinal() \
+                    if (end_month == 12) else datetime(end_year, end_month + 1, 1).toordinal()
+            total = len(range(start, end))
+
     with tqdm(total=total) as bar:
-        for year in range(syear, eyear + 1):
-            if comp in ('day', 'month'):
-                for query in daymonth_filegen(sen=sen, year=year):
-                    # --------------------------------------------
-                    get_file(query_url=query, opath=opath, bar=bar)
-                    # --------------------------------------------
+        for year in range(start_year, end_year + 1):
+            if composite_period in ('day', 'month'):
+                for query in dmo_filegen(
+                        sensor=sensor
+                        , year=year
+                        , filetype=file_type
+                        , composite_period=composite_period
+                        , variable=variable
+                        , start_month=start_month
+                        , end_month=end_month
+                        , start_day=start_day
+                        , end_day=end_day
+                        , subarea=subarea):
+                    # --------------------------------------------------
+                    get_file(query_url=query, opath=output_dir, bar=bar)
+                    # --------------------------------------------------
 
-            if comp == 'year':
-                ncfile = f'{init}{year}_{var}_{sba}_{comp}.nc'
-                query = url.format(filetype='netcdf', subarea=sba, year=year, filename=ncfile)
-                # --------------------------------------------
-                get_file(query_url=query, opath=opath, bar=bar)
-                # --------------------------------------------
-
-                pngfile = f'{init}{year}_{var}_{sba}_{comp}.png'
-                query = url.format(filetype='images', subarea=sba, year=year, filename=pngfile)
-                # --------------------------------------------
-                get_file(query_url=query, opath=opath, bar=bar)
-                # --------------------------------------------
+            if composite_period == 'year':
+                init = SEN_DICT[sensor]
+                for ext in file_type:
+                    filetype = 'netcdf' if 'nc' in ext else 'images'
+                    # -----------------------------------------------------------------
+                    file = f'{init}{year}_{variable}_{subarea}_{composite_period}.{ext}'
+                    query = URL.format(filetype=filetype,
+                                       subarea=subarea, year=year, filename=file)
+                    # -----------------------------------------------------------
+                    get_file(query_url=query, opath=output_dir, bar=bar)
+                    # --------------------------------------------------
     return
+
+
+# def download_range(composite_period: str, start_year: int, end_year: int,
+#                    start_month: int, end_month: int, start_day: int, end_day: int):
+#     if composite_period == 'year':
+#         total = len(range(start_year, end_year + 1))
+#     else:
+#         if composite_period == 'month':
+#             total = len([datetime(y, m, 1)
+#                          for y in range(start_year, end_year + 1)
+#                          for m in range(1, 13)
+#                          if (y <= end_year) and (m <= end_month)])
+#         else:
+#             start = datetime(start_year, start_month, start_day).toordinal()
+#             end = datetime(end_year, end_month, end_day).toordinal() + 1
+#             total = len(range(start, end))
+#     return total
 
 # def in_water(df, sensor: str):
 #     if sensor in ('MODIS-Aqua', 'aqua'):
