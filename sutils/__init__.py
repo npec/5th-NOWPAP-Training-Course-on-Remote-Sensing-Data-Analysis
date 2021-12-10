@@ -612,37 +612,3 @@ def nc_write(file: Path, data, varname: str, lon, lat, count=None):
     f = basename.strip('.nc')
     print(f'NCWRITE: {f} | Elapsed: {hour:2} hours {mnt:2} minutes {sec:5.3f} seconds')
     return
-
-# def download_range(composite_period: str, start_year: int, end_year: int,
-#                    start_month: int, end_month: int, start_day: int, end_day: int):
-#     if composite_period == 'year':
-#         total = len(range(start_year, end_year + 1))
-#     else:
-#         if composite_period == 'month':
-#             total = len([datetime(y, m, 1)
-#                          for y in range(start_year, end_year + 1)
-#                          for m in range(1, 13)
-#                          if (y <= end_year) and (m <= end_month)])
-#         else:
-#             start = datetime(start_year, start_month, start_day).toordinal()
-#             end = datetime(end_year, end_month, end_day).toordinal() + 1
-#             total = len(range(start, end))
-#     return total
-
-# def in_water(df, sensor: str):
-#     if sensor in ('MODIS-Aqua', 'aqua'):
-#         # https://oceancolor.gsfc.nasa.gov/atbd/chlor_a/
-#         a0, a1, a2, a3, a4 = 0.2424, -2.7423, 1.8017, 0.0015, -1.2280
-#
-#         idx = df['Variable [Units]'].isin(['Rrs_443 [sr^-1]'])
-#         rrs443 = df.loc[idx, 'Median']
-#         idx = df['Variable [Units]'].isin(['Rrs_488 [sr^-1]'])
-#         rrs488 = df.loc[idx, 'Median']
-#         idx = df['Variable [Units]'].isin(['Rrs_547 [sr^-1]'])
-#         rrs547 = df.loc[idx, 'Median']
-#         r = np.log10(np.maximum(rrs443.to_numpy(), rrs488.to_numpy()) / rrs547.to_numpy())
-#         print(f'r: {r}')
-#         return a0 + a1 * r + a2 * (r ** 2) + a3 * (r ** 3) + a4 * (r ** 4)
-#
-#     if sensor == 'sgli':
-#         return
