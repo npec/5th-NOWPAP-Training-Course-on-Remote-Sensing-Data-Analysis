@@ -9,6 +9,7 @@ import numpy as np
 import requests
 import scipy.io as sio
 from matplotlib import ticker
+from netCDF4 import Dataset
 from scipy import stats
 from tqdm import tqdm
 
@@ -27,14 +28,21 @@ class ReturnValue:
     desc: str
 
 
-def coastline(file: Path = None):
+def add_coastline(ax, file: Path = None):
+    # we have defined a custom function that reads coastline data in util
     key = 'ncst'
     if file is None:
-        file = '{}/{}'.format(Path().parent,
-                              'sample_data/nowpap_sea.mat')
+        print(Path('.').parent)
+        file = '{}/{}'.format(Path('.').absolute().parent,
+                              'sutils/nowpap_sea.mat')
         # print(file)
     cline = sio.loadmat(file, variable_names=[key], squeeze_me=True).get(key)
-    return cline[:, 0], cline[:, 1]
+
+    x, y = cline[:, 0], cline[:, 1]
+    ax.plot(x, y, '-k')
+    ax.set_xlim(np.nanmin(x), np.nanmax(x))
+    ax.set_ylim(np.nanmin(y), np.nanmax(y))
+    return
 
 
 def regress(x, y, scale: str = 'log-log'):
@@ -488,7 +496,6 @@ def get_file(query_url: str, opath: Path, bar: tqdm):
 def download(variable: str, subarea: str, sensor: str, start_year: int,
              end_year: int, composite_period: str, start_month: int, file_type: tuple,
              end_month: int, start_day: int, end_day: int, output_dir: Path):
-
     if composite_period == 'year':
         total = len(range(start_year, end_year + 1))
     else:
@@ -537,6 +544,74 @@ def download(variable: str, subarea: str, sensor: str, start_year: int,
                     # --------------------------------------------------
     return
 
+
+def nc_write(file: Path, data, varname: str, lon, lat, count=None):
+    """Caller method for writing the netcdf file"""
+    basename = file.name
+    start = time.perf_counter()
+
+    with Dataset(file, 'w') as trg:
+        # Global attributes
+        trg.setncatts({'product_name': basename,
+                       'Creator': 'NOWPAP-CEARAC (5th NOWPAP Training)',
+                       'date_created': "{}".format(time.ctime())})
+
+        # Create the dimensions of the file
+        trg.createDimension('lat', lat.size)
+        nc_dim = trg.createVariable('lat', 'float32', ('lat',))
+        nc_dim.setncatts({'standard_name': 'latitude',
+                          'long_name': 'latitude',
+                          'units': 'degrees_north',
+                          'axis': 'Y',
+                          'valid_min': lat.min(),
+                          'valid_max': lat.max()})
+        nc_dim[:] = lat
+
+        trg.createDimension('lon', lon.size)
+        nc_dim = trg.createVariable('lon', 'float32', ('lon',))
+        nc_dim.setncatts({'standard_name': 'longitude',
+                          'long_name': 'longitude',
+                          'units': 'degrees_east',
+                          'axis': 'Y',
+                          'valid_min': lon.min(),
+                          'valid_max': lon.max()})
+        nc_dim[:] = lon
+
+        if count is not None:
+            """Creates the valid pixel count for the composite data"""
+            nc_dim = trg.createVariable('count', 'int16',
+                                        (u'lat', u'lon'),
+                                        zlib=True, complevel=6)
+            nc_dim.setncatts({
+                'standard_name': 'count of valid pixels'
+                , 'long_name': 'number of valid data in each pixel for the composite period'
+                , 'units': 'count'
+                , '_FillValue': np.int16(count.fill_value)
+                , 'valid_min': count.min().astype('int16')
+                , 'valid_max': count.max().astype('int16')})
+            nc_dim[:] = count
+
+        comp = trg.createVariable(varname, 'float32',
+                                  (u'lat', u'lon'),
+                                  zlib=True, complevel=6)
+        comp.setncatts({
+            'long_name': 'concentration_of_phytoplankton_green_pigment_in_surface_water'
+            , 'standard_name': 'Chlorophyll-a concentration'
+            , 'units': 'mg/m^3'
+            , '_FillValue': data.fill_value.astype(np.float32)
+            , 'valid_min': data.min().astype(np.float32)
+            , 'valid_max': data.max().astype(np.float32)
+        })
+        comp[:] = data
+
+    elapsed = time.perf_counter() - start
+    hour = int(elapsed // 3600)
+    mnt = int(elapsed % 3600 // 60)
+    sec = elapsed % 3600 % 60
+
+    f = basename.strip('.nc')
+    print(f'NCWRITE: {f} | Elapsed: {hour:2} hours {mnt:2} minutes {sec:5.3f} seconds')
+    return
 
 # def download_range(composite_period: str, start_year: int, end_year: int,
 #                    start_month: int, end_month: int, start_day: int, end_day: int):
