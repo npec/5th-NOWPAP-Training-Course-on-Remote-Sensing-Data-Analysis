@@ -3,17 +3,26 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from matplotlib.path import Path as mPath
 
+import cv2
 import h5py
 import numpy as np
 import requests
 import scipy.io as sio
-from matplotlib import ticker
-from netCDF4 import Dataset
+from matplotlib import ticker, patches
+from netCDF4 import Dataset, num2date
+from pyproj import Geod
 from scipy import stats
 from tqdm import tqdm
 
+SEN_DICT = {'SeaWiFS': 'S', 'MODIS-Aqua': 'A', 'MERIS': 'M', 'VIIRS-SNPP': 'V', 'YOC': 'Y', 'SGLI': 'GS'}
+URL = 'https://ocean.nowpap3.go.jp/image_search/{filetype}/{subarea}/{year}/{filename}'
 
+
+# ====================
+# online match-up tool
+# ====================
 @dataclass
 class ReturnValue:
     """
@@ -26,23 +35,6 @@ class ReturnValue:
     xp: np.array
     yp: np.array
     desc: str
-
-
-def add_coastline(ax, file: Path = None):
-    # we have defined a custom function that reads coastline data in util
-    key = 'ncst'
-    if file is None:
-        print(Path('.').parent)
-        file = '{}/{}'.format(Path('.').absolute().parent,
-                              'sutils/nowpap_sea.mat')
-        # print(file)
-    cline = sio.loadmat(file, variable_names=[key], squeeze_me=True).get(key)
-
-    x, y = cline[:, 0], cline[:, 1]
-    ax.plot(x, y, '-k')
-    ax.set_xlim(np.nanmin(x), np.nanmax(x))
-    ax.set_ylim(np.nanmin(y), np.nanmax(y))
-    return
 
 
 def regress(x, y, scale: str = 'log-log'):
@@ -243,10 +235,34 @@ def validation(x, y, plt, xlabel: str, ylabel: str, xscale: str = 'log',
     return
 
 
+def add_coastline(ax, file: Path = None, xlim=None, ylim=None):
+    # we have defined a custom function that reads coastline data in util
+    key = 'ncst'
+    if file is None:
+        print(Path('.').parent)
+        file = '{}/{}'.format(Path('.').absolute().parent,
+                              'sutils/nowpap_sea.mat')
+        # print(file)
+    cline = sio.loadmat(file, variable_names=[key], squeeze_me=True).get(key)
+
+    x, y = cline[:, 0], cline[:, 1]
+    ax.plot(x, y, '-k')
+    if xlim is None:
+        ax.set_xlim(np.nanmin(x), np.nanmax(x))
+    else:
+        ax.set_xlim(np.nanmin(xlim), np.nanmax(xlim))
+
+    if ylim is None:
+        ax.set_ylim(np.nanmin(y), np.nanmax(y))
+    else:
+        ax.set_ylim(np.nanmin(ylim), np.nanmax(ylim))
+    return
+
+
 def mpl_custom(mpl):
     # custom image settings
     mpl.rcParams.update({
-        'font.size': 25,
+        'font.size': 14,
         # 'axes.grid': True,
         'axes.linewidth': 2,
         'grid.linewidth': 1,
@@ -422,8 +438,236 @@ def h5_read(file: Path, key: str):
     return sds
 
 
-SEN_DICT = {'SeaWiFS': 'S', 'MODIS-Aqua': 'A', 'MERIS': 'M', 'VIIRS-SNPP': 'V', 'YOC': 'Y', 'SGLI': 'GS'}
-URL = 'https://ocean.nowpap3.go.jp/image_search/{filetype}/{subarea}/{year}/{filename}'
+# ====================
+# Time-series analysis
+# ====================
+def add2map(file: Path, ax, point: dict = None, region: dict = None):
+    lat = nc_reader(file=file, var='lat')
+    lon = nc_reader(file=file, var='lon')
+    add_coastline(
+        ax=ax
+        , xlim=[np.min(lon), np.max(lon)]
+        , ylim=[np.min(lat), np.max(lat)])
+
+    if point is not None:
+        x, y = point['lon'][0], point['lat'][0]
+        ax.scatter(x, y, s=200, c='orange', edgecolors='k')
+
+    if region is not None:
+        path = mpl_path(bbox=region)
+        patch = patches.PathPatch(path, facecolor='orange', lw=2)
+        ax.add_patch(patch)
+    return
+
+
+def mpl_path(bbox: dict):
+    x0, x1 = bbox['lon']
+    y0, y1 = bbox['lat']
+
+    # path vertex coordinates
+    vertices = [
+        (x0, y0),  # left, bottom
+        (x0, y1),  # left, top
+        (x1, y1),  # right, top
+        (x1, y0),  # right, bottom
+        (x0, y0),  # ignored
+    ]
+
+    codes = [
+        mPath.MOVETO,
+        mPath.LINETO,
+        mPath.LINETO,
+        mPath.LINETO,
+        mPath.CLOSEPOLY,
+    ]
+
+    return mPath(vertices, codes)
+
+
+def area_mask(bbox: dict, lon, lat):
+    path = mpl_path(bbox=bbox)
+
+    # create a mesh grid for the whole image
+    if len(lon.shape) == 1:
+        x, y = np.meshgrid(lon, lat)
+    else:
+        x, y = lon, lat
+    # mesh grid to a list of points
+    points = np.vstack((x.ravel(), y.ravel())).T
+
+    # select points included in the path
+    mask = path.contains_points(points)
+    return np.array(mask).reshape(x.shape)
+
+
+def harv_dist(px: float, py: float, lon, lat, datum: str = 'WGS84'):
+    """
+    Distance from a point x, y in geographical space
+    """
+    p = np.pi / 180.
+    g = Geod(ellps=datum)
+
+    a = (g.a ** 2 * np.cos(py * p)) ** 2
+    b = (g.b ** 2 * np.sin(py * p)) ** 2
+
+    c = (a * np.cos(py * p)) ** 2
+    d = (b * np.cos(py * p)) ** 2
+
+    r = np.sqrt((a + b) / (c + d))
+
+    if len(lon.shape) == 1:
+        x, y = np.meshgrid(lon, lat)
+    else:
+        x, y = lon, lat
+
+    px = np.ones(x.shape) * px
+    py = np.ones(x.shape) * py
+    e = 0.5 - np.cos((y - py) * p) / 2 + np.cos(
+        y * p) * np.cos(py * p) * (
+                1 - np.cos((px - x) * p)) / 2
+    # 2*R*asin..
+    return 2 * r * np.arcsin(e ** .5)
+
+
+def fmt_sds(sds, mask):
+    result, true = [], np.bool_(True)
+    for v, m in zip(sds, mask):
+        if m is true:
+            result.append('-999')
+            continue
+        result.append(f'{v:.8f}')
+    return result
+
+
+def pyextract(bbox: dict, file_list: list, filename: Path, window: int = None):
+    lat = nc_reader(file_list[0], 'lat')
+    lon = nc_reader(file_list[0], 'lon')
+
+    with open(filename, 'w') as txt:
+        if len(bbox['lon']) == 1:
+            px, py = bbox['lon'][0], bbox['lat'][0]
+
+            txt.writelines('filename,time_start,time_end,pixel_count,valid,invalid,'
+                           'min,max,mean,median,std,pixel_value\n')
+
+            dist = harv_dist(px=px, py=py, lon=lon, lat=lat)
+            px_value = np.where(dist == dist.min())
+            mask = np.zeros_like(dist)
+            mask[px_value] = 1
+
+            if window:
+                if window % 2 == 0:
+                    raise Exception('Window must be an odd number!!')
+                kernel = np.ones((window, window), np.uint8)
+                mask = np.bool_(cv2.dilate(mask, kernel, iterations=1))
+            else:
+                mask = np.bool_(mask)
+
+        elif len(bbox['lon']) == 2:
+            mask = area_mask(bbox=bbox, lon=lon, lat=lat)
+            txt.writelines('filename,time_start,time_end,pixel_count,valid,invalid,'
+                           'min,max,mean,median,std\n')
+
+        else:
+            raise Exception('Unexpected number of values in the BBOX')
+
+        fill_value = -999
+        for i, f in enumerate(file_list):
+            sds = nc_reader(file=f, var='chlor_a')
+            tcs = nc_attribute(file=f, name='time_coverage_start')
+            tce = nc_attribute(file=f, name='time_coverage_end')
+
+            masked = sds[mask]
+            valid = np.ma.compressed(masked)
+            valid_px = valid.size
+            total_px = masked.size
+            invalid_px = total_px - valid_px
+
+            if np.all(masked.mask):
+                dset = [f.name, tcs, tce, total_px, valid_px, invalid_px, fill_value,
+                        fill_value, fill_value, fill_value, fill_value, fill_value]
+                if len(bbox['lon']) == 2:
+                    dset = dset[:-1]
+                fmt = ['s', 's', 's', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g']
+            else:
+                sds_mean = 10 ** np.log10(valid).mean()
+                sds_std = 10 ** np.log10(valid).std()
+                sds_max = valid.max()
+                sds_min = valid.min()
+                sds_med = np.median(valid)
+                dset = [f.name, tcs, tce, total_px, valid_px, invalid_px,
+                        sds_min, sds_max, sds_mean, sds_med, sds_std]
+                fmt = ['s', 's', 's', 'g', 'g', 'g', '.6f', '.6f', '.6f', '.6f', '.6f', '.6f']
+                if len(bbox['lon']) == 1:
+                    pxv = sds[px_value][0] if sds[px_value].mask[0] is np.bool_(False) else fill_value
+                    dset.append(pxv)
+                    if pxv == -999:
+                        fmt = ['s', 's', 's', 'g', 'g', 'g', '.6f', '.6f', '.6f', '.6f', '.6f', 'g']
+
+            line = ','.join([f'{val:{sf}}' for val, sf in zip(dset, fmt)])
+            txt.writelines(f'{line}\n')
+    return
+
+
+def preallocate(file: Path, varname: str, t: int):
+    with Dataset(file, 'r') as nc:
+        shape = np.ma.squeeze(nc[varname][:]).shape
+    shape = (t,) + shape
+    return np.ma.empty(shape=shape, dtype=np.float32)
+
+
+def get_min_max(files: list, varname: str = 'chlor_a', case: str = 'max'):
+    sds = preallocate(file=files[0], t=len(files), varname=varname)
+    for j, f in enumerate(files):
+        sds[j, :, :] = nc_reader(file=f, var=varname)
+    fill_value = nc_reader(file=files[0], var=varname).fill_value
+
+    input_dates = []
+    append = input_dates.append
+
+    for j, f in enumerate(files):
+        append(nc_reader(file=f, var='time')[0])
+
+    mask = sds.mean(axis=0).mask
+    # Min data
+    if case == 'min':
+        data = np.ma.amin(sds, axis=0)
+        data = np.ma.masked_where(mask, data)
+        np.ma.set_fill_value(data, fill_value=fill_value)
+
+        idx = np.ma.argmin(sds, axis=0)
+        doy = np.array([d.timetuple().tm_yday for d in input_dates])[idx]
+        doy = np.ma.masked_where(idx == 0, doy)
+        return data, doy
+
+    # Max data
+    mask = sds.mean(axis=0).mask
+    data = np.ma.amax(sds, axis=0)
+    data = np.ma.masked_where(mask, data)
+    np.ma.set_fill_value(data, fill_value=fill_value)
+
+    idx = np.ma.argmax(sds, axis=0)
+    doy = np.array([d.timetuple().tm_yday for d in input_dates])[idx]
+    doy = np.ma.masked_where(idx == 0, doy)
+
+    return data, doy
+
+
+def nc_attribute(file: Path, name: str, location: str = '/'):
+    with Dataset(file, 'r') as nc:
+        if location == '/':
+            return nc.getncattr(name)
+        value = nc[location].getncattr(name)
+    return value
+
+
+def nc_reader(file: Path, var: str):
+    with Dataset(file, 'r') as nc:
+        if var == 'time':
+            sds = num2date(nc[var][:], units=nc[var].units)
+        else:
+            sds = np.ma.squeeze(nc[var][:])
+    return sds
 
 
 # Day month fetching file generator
