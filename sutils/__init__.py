@@ -460,6 +460,14 @@ def add2map(file: Path, ax, point: dict = None, region: dict = None):
     return
 
 
+def get_nc_keys(file: Path):
+    exclude = 'lon', 'lat', 'crs', 'time'
+    with Dataset(file, 'r') as nc:
+        keys = [key for key in nc.variables.keys()
+                if (key not in exclude)]
+    return keys
+
+
 def mpl_path(bbox: dict):
     x0, x1 = bbox['lon']
     y0, y1 = bbox['lat']
@@ -543,6 +551,37 @@ def pyextract(bbox: dict, file_list: list, filename: Path, window: int = None):
     lat = nc_reader(file_list[0], 'lat')
     lon = nc_reader(file_list[0], 'lon')
 
+    def extract():
+        masked = 10**(sds[mask] * 0.015 - 2)
+        valid = np.ma.compressed(masked)
+        valid_px = valid.size
+        total_px = masked.size
+        invalid_px = total_px - valid_px
+
+        if np.all(masked.mask):
+            dset = [f.name, tcs, tce, total_px, valid_px, invalid_px, fill_value,
+                    fill_value, fill_value, fill_value, fill_value, fill_value]
+            if len(bbox['lon']) == 2:
+                dset = dset[:-1]
+            fmt = ['s', 's', 's', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g']
+        else:
+            sds_mean = 10 ** np.log10(valid).mean()
+            sds_std = 10 ** np.log10(valid).std()
+            sds_max = valid.max()
+            sds_min = valid.min()
+            sds_med = np.median(valid)
+            dset = [f.name, tcs, tce, total_px, valid_px, invalid_px,
+                    sds_min, sds_max, sds_mean, sds_med, sds_std]
+            fmt = ['s', 's', 's', 'g', 'g', 'g', '.6f', '.6f', '.6f', '.6f', '.6f', '.6f']
+            if len(bbox['lon']) == 1:
+                pxv = sds[px_value][0] if sds[px_value].mask[0] is np.bool_(False) else fill_value
+                dset.append(pxv)
+                if pxv == -999:
+                    fmt = ['s', 's', 's', 'g', 'g', 'g', '.6f', '.6f', '.6f', '.6f', '.6f', 'g']
+
+        line = ','.join([f'{val:{sf}}' for val, sf in zip(dset, fmt)])
+        txt.writelines(f'{line}\n')
+
     with open(filename, 'w') as txt:
         if len(bbox['lon']) == 1:
             px, py = bbox['lon'][0], bbox['lat'][0]
@@ -572,40 +611,34 @@ def pyextract(bbox: dict, file_list: list, filename: Path, window: int = None):
             raise Exception('Unexpected number of values in the BBOX')
 
         fill_value = -999
-        for i, f in enumerate(file_list):
-            sds = nc_reader(file=f, var='chlor_a')
-            tcs = nc_attribute(file=f, name='time_coverage_start')
-            tce = nc_attribute(file=f, name='time_coverage_end')
+        if len(file_list) > 1:
+            for i, f in enumerate(file_list):
+                sds = nc_reader(file=f, var='chlor_a')
+                tcs = nc_attribute(file=f, name='time_coverage_start')
+                tce = nc_attribute(file=f, name='time_coverage_end')
 
-            masked = sds[mask]
-            valid = np.ma.compressed(masked)
-            valid_px = valid.size
-            total_px = masked.size
-            invalid_px = total_px - valid_px
+                extract()
 
-            if np.all(masked.mask):
-                dset = [f.name, tcs, tce, total_px, valid_px, invalid_px, fill_value,
-                        fill_value, fill_value, fill_value, fill_value, fill_value]
-                if len(bbox['lon']) == 2:
-                    dset = dset[:-1]
-                fmt = ['s', 's', 's', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g', 'g']
-            else:
-                sds_mean = 10 ** np.log10(valid).mean()
-                sds_std = 10 ** np.log10(valid).std()
-                sds_max = valid.max()
-                sds_min = valid.min()
-                sds_med = np.median(valid)
-                dset = [f.name, tcs, tce, total_px, valid_px, invalid_px,
-                        sds_min, sds_max, sds_mean, sds_med, sds_std]
-                fmt = ['s', 's', 's', 'g', 'g', 'g', '.6f', '.6f', '.6f', '.6f', '.6f', '.6f']
-                if len(bbox['lon']) == 1:
-                    pxv = sds[px_value][0] if sds[px_value].mask[0] is np.bool_(False) else fill_value
-                    dset.append(pxv)
-                    if pxv == -999:
-                        fmt = ['s', 's', 's', 'g', 'g', 'g', '.6f', '.6f', '.6f', '.6f', '.6f', 'g']
+        if len(file_list) == 1:
+            f = file_list[0]
+            for i, key in enumerate(get_nc_keys(file=f)):
+                sds = nc_reader(file=f, var=key)
+                try:
+                    tcs = nc_attribute(file=f, name='time_coverage_start')
+                    tce = nc_attribute(file=f, name='time_coverage_end')
+                except AttributeError:
+                    try:
+                        sy = nc_attribute(file=f, name='Start Year', location=key)
+                        sd = nc_attribute(file=f, name='Start Day', location=key)
+                        tcs = datetime.strptime(f'{sy}{sd:03}', '%Y%j').strftime('%FT%H:%M:%SZ')
 
-            line = ','.join([f'{val:{sf}}' for val, sf in zip(dset, fmt)])
-            txt.writelines(f'{line}\n')
+                        ey = nc_attribute(file=f, name='End Year', location=key)
+                        ed = nc_attribute(file=f, name='End Day', location=key)
+                        tce = datetime.strptime(f'{ey}{ed:03}', '%Y%j').strftime('%FT%H:%M:%SZ')
+
+                    except AttributeError:
+                        tcs = tce = '-999'
+                extract()
     return
 
 
