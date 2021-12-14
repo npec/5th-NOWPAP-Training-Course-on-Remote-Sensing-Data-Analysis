@@ -42,7 +42,7 @@ This page introduces materials for the Webinar 2: Dec. 14 - 16, 2021
 (H) Hands-on exercise
 
 ---
-# Prerequisites
+## Prerequisites
 ---
 All hands-on use Jupyter notebooks to run Python code
 Please install Jupyter Notebook from the link below
