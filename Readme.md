@@ -58,6 +58,7 @@ To do that (Windows)
 On MacOS, you should be able to install the requirements through the terminal by launching it using ANACONDA NAVIGATOR. 
 
 If you are unable to install the requirements, we can do it together during the hands-on.
+
 ---
 ## Organizer:
 
