@@ -56,6 +56,7 @@ To do that (Windows)
 - Type `pip install -r path_to_requirements/requirements.txt` then `enter`
 
 On MacOS, you should be able to install the requirements through the terminal by launching it using ANACONDA NAVIGATOR. 
+For MacOS users, it is worth checking this [help page](https://docs.anaconda.com/anaconda/install/mac-os/).
 
 If you are unable to install the requirements, we can do it together during the hands-on.
 
