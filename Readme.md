@@ -58,7 +58,17 @@ To do that (Windows)
 On MacOS, you should be able to install the requirements through the terminal by launching it using ANACONDA NAVIGATOR. 
 For MacOS users, it is worth checking this [help page](https://docs.anaconda.com/anaconda/install/mac-os/).
 
-If you are unable to install the requirements, we can do it together during the hands-on.
+Most MacOS come with Python2 pre-installed. In this tutorial we are going to use Python3.  
+To avoing any conflict between the Python from the system and the one we install, it is recommended to create an isolated virtual environment; a self-contained directory tree that contains a Python installation for a particular version of Python, plus a number of additional packages.  
+Here we are going to create our environment using `anaconda` and we will call it `nowpap_rst` short for NOWPAP Remote Sensing Training.  
+- From the ANACONDA NAVIGATOR click `Environments` 
+- Under the `base (root)` push the play button and then select `Open Terminal`.  
+- Inside terminal enter `conda env create -f path_to_environment_file\environment.yml` then `enter`.
+- After the installation is completed, in the ANACONDA NAVIGATOR `Environments` select `nowpap_rst`.
+- Under the play button select `Open with Jupyter Notebook`.
+This will launch the notebook from the created environment.
+
+If you are unable to have the system working on your computer, please let us know and we can do it together during the hands-on.
 
 ---
 ## Organizer:
