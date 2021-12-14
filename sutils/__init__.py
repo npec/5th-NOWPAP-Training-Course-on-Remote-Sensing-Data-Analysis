@@ -3,7 +3,6 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from matplotlib.path import Path as mPath
 
 import cv2
 import h5py
@@ -11,9 +10,11 @@ import numpy as np
 import requests
 import scipy.io as sio
 from matplotlib import ticker, patches
+from matplotlib.path import Path as mPath
 from netCDF4 import Dataset, num2date
 from pyproj import Geod
 from scipy import stats
+from scipy.special import ndtr, ndtri
 from tqdm import tqdm
 
 SEN_DICT = {'SeaWiFS': 'S', 'MODIS-Aqua': 'A', 'MERIS': 'M', 'VIIRS-SNPP': 'V', 'YOC': 'Y', 'SGLI': 'GS'}
@@ -441,6 +442,51 @@ def h5_read(file: Path, key: str):
 # ====================
 # Time-series analysis
 # ====================
+
+@dataclass
+class LSF:
+    """
+    Class for keeping track of the return values
+     m:  float
+        slope
+     b:  float
+        y-intercept
+     p:  float
+        p-value for the test of the slope
+     t_stat: float
+        t-statist from observations
+     t_crit: float
+        t-critical from the theoretical expectation
+    """
+    m: float
+    b: float
+    p: float
+    t_stat: float
+    t_crit: float
+
+
+@dataclass
+class SenSlope:
+    """
+    Class for keeping track of the return values
+     m:  float
+        slope
+     b:  float
+        y-intercept
+     p:  float
+        p-value for the test of the slope
+     z_score: float
+        z-statist from observations
+     z_crit: float
+        z-critical from the theoretical expectation
+    """
+    m: float
+    b: float
+    p: float
+    z_score: float
+    z_crit: float
+
+
 def add2map(file: Path, ax, point: dict = None, region: dict = None):
     lat = nc_reader(file=file, var='lat')
     lon = nc_reader(file=file, var='lon')
@@ -552,7 +598,7 @@ def pyextract(bbox: dict, file_list: list, filename: Path, window: int = None):
     lon = nc_reader(file_list[0], 'lon')
 
     def extract():
-        masked = 10**(sds[mask] * 0.015 - 2)
+        masked = 10 ** (sds[mask] * 0.015 - 2)
         valid = np.ma.compressed(masked)
         valid_px = valid.size
         total_px = masked.size
@@ -701,6 +747,195 @@ def nc_reader(file: Path, var: str):
         else:
             sds = np.ma.squeeze(nc[var][:])
     return sds
+
+
+def lsq_fity(x, y, alpha: float = 0.05):
+    """
+     Calculate a "MODEL-1" least squares fit by:  Edward T Peltzer, MBARI
+
+     The line is fit by MINIMIZING the residuals in Y only.
+
+     The equation of the line is:     Y = my * X + by.
+
+     Equations are from Bevington & Robinson (1992)
+       Data Reduction and Error Analysis for the Physical Sciences, 2nd Ed."
+       pp: 104, 108-109, 199.
+
+     Data are input and output as follows:
+         m, b, r, sm, sb = lsq_fity(x, y)
+
+    Parameters
+    ----------
+    x: np.array
+        input x vector
+    y: np.array
+        input y vector
+    alpha: float
+
+    Returns
+    -------
+    ReturnValue:
+        return values in dataclass
+    """
+
+    x = np.asarray(x)
+    y = np.asarray(y)
+    # Determine the size of the vector
+    n = len(x)
+
+    # Calculate the sums
+    sx = x.sum()
+    sy = y.sum()
+    sx2 = np.sum(x ** 2)
+    sxy = np.sum(x * y)
+
+    # Calculate re-used expressions
+    num = n * sxy - sx * sy
+    den = n * sx2 - sx ** 2
+
+    # Calculate my, by, ry, s2, smy and sby
+    my = num / den
+    by = (sx2 * sy - sx * sxy) / den
+
+    df = n - 2
+    diff = y - by - my * x
+
+    s2 = np.sum(diff * diff) / (n - 2)
+    smy = np.sqrt(n * s2 / den)
+
+    t_stat = my / smy
+    t_crit = stats.t.ppf(1 - alpha / 2, df)  # equivalent to Excel TINV(0.05, DF)
+    py = stats.t.sf(t_stat, df=df) * 2  # two-sided p-value = Prob(abs(t)>tt)
+
+    return LSF(my, by, py, t_stat, t_crit)
+
+
+def mktest(x, y, eps=1e-6, alpha: float = 0.1):
+    """
+        Runs the Mann-Kendall test for trend in time series data.
+        https://up-rs-esp.github.io/mkt/
+
+        Parameters
+        ----------
+        x : 1D numpy.ndarray
+            array of the time points of measurements
+        y : 1D numpy.ndarray
+            array containing the measurements corresponding to entries of 't'
+        eps : scalar, float, greater than zero
+            least count error of measurements which help determine ties in the data
+        alpha:
+
+        Returns
+        -------
+        m : scalar, float
+            slope of the linear fit to the data
+        c : scalar, float
+            intercept of the linear fit to the data
+        p : scalar, float, greater than zero
+            p-value of the obtained Z-score statistic for the Mann-Kendall test
+
+        """
+
+    # estimate sign of all possible (n(n-1)) / 2 differences
+    n = len(x)
+    zscore = None
+    sgn = np.zeros((n, n), dtype=np.int32)
+    for i in range(n):
+        tmp = y - y[i]
+        tmp[np.where(np.fabs(tmp) <= eps)] = 0
+        sgn[i] = np.sign(tmp)
+
+    # estimate mean of the sign of all possible differences
+    # s = sgn[np.triu_indices(n, k=1)].sum()
+    s = 0
+    for j in range(n):
+        tmp = y[(j + 1):] - y[j]
+        tmp[np.where(np.fabs(tmp) <= eps)] = 0
+        s += np.sign(tmp).sum()
+
+    # estimate variance of the sign of all possible differences
+    # 1. Determine no. of tie groups 'p' and no. of ties in each group 'q'
+    np.fill_diagonal(sgn, eps * 1E6)
+    i, j = np.where(sgn == 0.)
+    ties = np.unique(y[i])
+    p = len(ties)
+    q = np.zeros(len(ties), dtype=np.int32)
+    for k in range(p):
+        idx = np.where(np.fabs(y - ties[k]) < eps)[0]
+        q[k] = len(idx)
+
+    # 2. Determine the two terms in the variance calculation
+    term1 = n * (n - 1) * (2 * n + 5)
+    term2 = (q * (q - 1) * (2 * q + 5)).sum()
+    # 3. estimate variance
+    var_s = float(term1 - term2) / 18.
+
+    # Compute the Z-score and the p-value for the obtained Z-score
+    if s > eps:
+        zscore = (s - 1) / np.sqrt(var_s)
+        p = 0.5 * (1. - ndtr(zscore))
+    elif np.fabs(s) <= eps:
+        zscore, p = 0., 0.5
+    elif s < -eps:
+        zscore = (s + 1) / np.sqrt(var_s)
+        p = 0.5 * (ndtr(zscore))
+
+    # compute test based on given 'alpha' and alternative hypothesis
+    z_crit = ndtri(1. - alpha / 2.)
+
+    # estimate the slope and intercept of the line
+    m = np.corrcoef(x, y)[0, 1] * (np.std(y) / np.std(x))
+    c = np.mean(y) - m * np.mean(x)
+
+    return m, c, p, zscore, z_crit
+
+
+def sen_slope(x, y, alpha: float = 0.1):
+    """
+     Calculate a "MODEL-1" least squares fit by:  Edward T Peltzer, MBARI
+
+     The line is fit by MINIMIZING the residuals in Y only.
+
+     The equation of the line is:     Y = my * X + by.
+
+     Equations are from Bevington & Robinson (1992)
+       Data Reduction and Error Analysis for the Physical Sciences, 2nd Ed."
+       pp: 104, 108-109, 199.
+
+     Data are input and output as follows:
+         m, b, r, sm, sb = lsq_fity(x, y)
+
+    Parameters
+    ----------
+    x: np.array
+        input x vector
+    y: np.array
+        input y vector
+    alpha: float
+
+    Returns
+    -------
+    ReturnValue:
+        return values in dataclass
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+
+    n = x.size
+    ns = int(n * (n - 1) / 2)
+    slope = np.empty((ns,), dtype=np.float32)
+
+    start, end = 0, 0
+    for i in range(n):
+        tmp = (y[(i + 1):] - y[i]) / (x[(i + 1):] - x[i])
+        end += tmp.size
+        slope[start:end] = tmp
+        start = end
+    s = np.median(slope)
+
+    slope, inter, pval, z_score, z_crit = mktest(x=x, y=y, alpha=alpha)
+    # print(f'MKSploe: {slope}\nSenSlope: {s}\nZS: {z_score}\nZC: {z_crit}')
+    return SenSlope(s, inter, pval, z_score, z_crit)
 
 
 # Day month fetching file generator
