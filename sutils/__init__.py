@@ -9,7 +9,7 @@ import h5py
 import numpy as np
 import requests
 import scipy.io as sio
-from matplotlib import ticker, patches
+from matplotlib import ticker, patches, colors
 from matplotlib.path import Path as mPath
 from netCDF4 import Dataset, num2date
 from pyproj import Geod
@@ -691,8 +691,9 @@ def pyextract(bbox: dict, file_list: list, filename: Path, window: int = None):
 def preallocate(file: Path, varname: str, t: int):
     with Dataset(file, 'r') as nc:
         shape = np.ma.squeeze(nc[varname][:]).shape
+        dtype = nc[varname][:].dtype
     shape = (t,) + shape
-    return np.ma.empty(shape=shape, dtype=np.float32)
+    return np.ma.empty(shape=shape, dtype=dtype)
 
 
 def get_min_max(files: list, varname: str = 'chlor_a', case: str = 'max'):
@@ -934,7 +935,6 @@ def sen_slope(x, y, alpha: float = 0.1):
     s = np.median(slope)
 
     slope, inter, pval, z_score, z_crit = mktest(x=x, y=y, alpha=alpha)
-    # print(f'MKSploe: {slope}\nSenSlope: {s}\nZS: {z_score}\nZC: {z_crit}')
     return SenSlope(s, inter, pval, z_score, z_crit)
 
 
@@ -1124,3 +1124,33 @@ def nc_write(file: Path, data, varname: str, lon, lat, count=None):
     f = basename.strip('.nc')
     print(f'NCWRITE: {f} | Elapsed: {hour:2} hours {mnt:2} minutes {sec:5.3f} seconds')
     return
+
+
+def get_cmap():
+    rr = [0, 191, 190]
+    gg = [24, 171, 0]
+    bb = [190, 4, 24]
+
+    rr, gg, bb = (np.array(rr) / 255., np.array(gg) / 255., np.array(bb) / 255.)
+
+    colours = list()
+    for r, g, b in zip(rr, gg, bb):
+        colours.append([r, g, b])
+
+    n = np.array(colours).shape[0]
+    # percent level of each colour in the colour map
+    levels = (np.array(range(n)) / float(n - 1)).tolist()  # type: list
+
+    stop = 0
+    r, g, b = [], [], []
+    while stop < n:
+        r.append(tuple([levels[stop], colours[stop][0], colours[stop][0]]))
+        g.append(tuple([levels[stop], colours[stop][1], colours[stop][1]]))
+        b.append(tuple([levels[stop], colours[stop][2], colours[stop][2]]))
+        stop += 1
+    colour_map = {
+        'red': tuple(r),
+        'green': tuple(g),
+        'blue': tuple(b)
+    }
+    return colors.LinearSegmentedColormap('slope', colour_map)
