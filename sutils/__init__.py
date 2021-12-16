@@ -466,7 +466,7 @@ class LSF:
 
 
 @dataclass
-class SenSlope:
+class MKT:
     """
     Class for keeping track of the return values
      m:  float
@@ -837,6 +837,9 @@ def mktest(x, y, eps=1e-6, alpha: float = 0.1):
 
         """
 
+    x = np.asarray(x)
+    y = np.asarray(y)
+
     # estimate sign of all possible (n(n-1)) / 2 differences
     n = len(x)
     zscore = None
@@ -888,10 +891,10 @@ def mktest(x, y, eps=1e-6, alpha: float = 0.1):
     m = np.corrcoef(x, y)[0, 1] * (np.std(y) / np.std(x))
     c = np.mean(y) - m * np.mean(x)
 
-    return m, c, p, zscore, z_crit
+    return MKT(m, c, p, zscore, z_crit)
 
 
-def sen_slope(x, y, alpha: float = 0.1):
+def sen_slope(x, y):
     """
      Calculate a "MODEL-1" least squares fit by:  Edward T Peltzer, MBARI
 
@@ -912,7 +915,6 @@ def sen_slope(x, y, alpha: float = 0.1):
         input x vector
     y: np.array
         input y vector
-    alpha: float
 
     Returns
     -------
@@ -932,10 +934,7 @@ def sen_slope(x, y, alpha: float = 0.1):
         end += tmp.size
         slope[start:end] = tmp
         start = end
-    s = np.median(slope)
-
-    slope, inter, pval, z_score, z_crit = mktest(x=x, y=y, alpha=alpha)
-    return SenSlope(s, inter, pval, z_score, z_crit)
+    return np.median(slope)
 
 
 # Day month fetching file generator
