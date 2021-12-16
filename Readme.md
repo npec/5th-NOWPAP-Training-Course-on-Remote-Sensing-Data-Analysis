@@ -45,8 +45,7 @@ This page introduces materials for the Webinar 2: Dec. 14 - 16, 2021
 ## Prerequisites
 ---
 All hands-on use Jupyter notebooks to run Python code.   
-Please install Jupyter Notebook from the link below
-https://www.anaconda.com/products/individual
+Please install Jupyter Notebook from this [link](https://www.anaconda.com/products/individual).
 
 Please also check this [Jupyter notebook](https://github.com/npec/5th-NOWPAP-Training-Course-on-Remote-Sensing-Data-Analysis/blob/main/anaconda-install-setup.ipynb) which explains how to have Jupyter notebook installed on different platforms.
 
