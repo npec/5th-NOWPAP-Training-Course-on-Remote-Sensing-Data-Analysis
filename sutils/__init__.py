@@ -598,7 +598,7 @@ def pyextract(bbox: dict, file_list: list, filename: Path, window: int = None):
     lon = nc_reader(file_list[0], 'lon')
 
     def extract():
-        masked = 10 ** (sds[mask] * 0.015 - 2)
+        masked = sds[mask]
         valid = np.ma.compressed(masked)
         valid_px = valid.size
         total_px = masked.size
